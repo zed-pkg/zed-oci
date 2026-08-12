@@ -84,7 +84,7 @@ jobs:
               test "$(id -g)" = 10001
               test "$PWD" = /workspace
               test "$ZED_PKG_HOME" = /home/zed/.zed-pkg
-              test "$(zed --version)" = "zed 0.2.0"
+              test "$(zed --version)" = "zed 0.2.1"
             '
             labels="$(docker image inspect --format '{{json .Config.Labels}}' "$platform_ref")"
             jq -e \

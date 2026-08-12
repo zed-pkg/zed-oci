@@ -31,7 +31,7 @@ cli_runtime_image="zed-oci-cli-tools:verify"
 
 version="$($runtime run --rm --platform "$platform" "$image" zed --version)"
 case "$version" in
-  "zed 0.2.0") ;;
+  "zed 0.2.1") ;;
   *) echo "verify: unexpected Zed version: $version" >&2; exit 1 ;;
 esac
 
