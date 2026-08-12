@@ -21,7 +21,7 @@ Docker's syntax is a named builder stage followed by `COPY --from`; there is no
 
 ```dockerfile
 # Replace the version tag with the published digest for production builds.
-FROM ghcr.io/zed-pkg/zed-oci:0.2.0 AS zed-builder
+FROM ghcr.io/zed-pkg/zed-oci:0.2.1 AS zed-builder
 
 WORKDIR /workspace
 RUN zed init project --org example
@@ -48,7 +48,7 @@ uses `/home/zed/.zed-pkg` as `ZED_PKG_HOME`.
 For a root-only build step, make the change explicit and align the cache path:
 
 ```dockerfile
-FROM ghcr.io/zed-pkg/zed-oci:0.2.0 AS dependencies
+FROM ghcr.io/zed-pkg/zed-oci:0.2.1 AS dependencies
 USER root
 ENV HOME=/root ZED_PKG_HOME=/root/.zed-pkg
 WORKDIR /app
@@ -60,7 +60,7 @@ RUN --mount=type=cache,target=/root/.zed-pkg \
 For the preferred non-root form:
 
 ```dockerfile
-FROM ghcr.io/zed-pkg/zed-oci:0.2.0 AS dependencies
+FROM ghcr.io/zed-pkg/zed-oci:0.2.1 AS dependencies
 WORKDIR /workspace
 COPY --chown=10001:10001 .zpkg.toml .zpkg.lock ./
 RUN --mount=type=cache,target=/home/zed/.zed-pkg,uid=10001,gid=10001 \
@@ -135,8 +135,9 @@ It deliberately has no application entrypoint. Its default command is
 `zed --help`, which makes an accidental standalone run useful without changing
 how derived images execute commands.
 
-Release tags mirror this repository's releases. `0.2.0` embeds Zed CLI
-`v0.2.0`. Production Dockerfiles should pin the published OCI index digest in
+Release tags mirror this repository's releases. `0.2.1` embeds Zed CLI
+`v0.2.1`, including bounded retries for checksum-locked CLI runtime downloads.
+Production Dockerfiles should pin the published OCI index digest in
 addition to the human-readable tag. Default-branch builds also publish `edge`
 and immutable `sha-<commit>` tags.
 
