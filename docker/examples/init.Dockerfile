@@ -3,13 +3,13 @@
 ARG ZED_OCI_IMAGE=zed-oci:local
 FROM ${ZED_OCI_IMAGE} AS workspace
 
-RUN zed init --org example --name generated-workspace \
-    && test -s /workspace/.zpkg.toml
+RUN zed init project --org example \
+    && test -s /workspace/project/.zpkg.toml
 
-FROM alpine:3.22.1@sha256:4bcff63911fcb4448bd4fdacec207030997caf25e9bea4045fa6c8c44de311d1
+FROM debian:bookworm-slim@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
 
 WORKDIR /app
-COPY --from=workspace --chown=65532:65532 /workspace/ /app/
+COPY --from=workspace --chown=65532:65532 /workspace/project/ /app/
 
 RUN test -s /app/.zpkg.toml \
     && ! command -v zed \

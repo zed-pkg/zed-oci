@@ -17,9 +17,10 @@ if ! command -v "$runtime" >/dev/null 2>&1; then
   exit 1
 fi
 
-platform="${PLATFORM:-linux/$(docker version --format '{{.Server.Arch}}' | sed 's/^x86_64$/amd64/; s/^aarch64$/arm64/')}"
+platform="${PLATFORM:-linux/$("$runtime" version --format '{{.Server.Arch}}' | sed 's/^x86_64$/amd64/; s/^aarch64$/arm64/')}"
 image="${ZED_OCI_IMAGE:-zed-oci:verify}"
 runtime_image="zed-oci-init:verify"
+cli_runtime_image="zed-oci-cli-tools:verify"
 
 "$runtime" buildx build \
   --platform "$platform" \
@@ -30,7 +31,7 @@ runtime_image="zed-oci-init:verify"
 
 version="$($runtime run --rm --platform "$platform" "$image" zed --version)"
 case "$version" in
-  "zed 0.1.0") ;;
+  "zed 0.2.0") ;;
   *) echo "verify: unexpected Zed version: $version" >&2; exit 1 ;;
 esac
 
@@ -62,4 +63,24 @@ esac
   test -s /app/.zpkg.toml
 '
 
-echo "verify: $platform builder and clean-runtime smoke tests passed"
+"$runtime" build \
+  --platform "$platform" \
+  --build-arg "ZED_OCI_IMAGE=$image" \
+  --file docker/examples/cli-tools.Dockerfile \
+  --tag "$cli_runtime_image" \
+  .
+
+# These variables intentionally expand in the container.
+# shellcheck disable=SC2016
+"$runtime" run --rm --platform "$platform" --read-only "$cli_runtime_image" sh -euc '
+  test "$(node --version)" = "v24.19.0"
+  test "$(nodejs --version)" = "v24.19.0"
+  test "$(python3 --version)" = "Python 3.14.7"
+  test "$(python --version)" = "Python 3.14.7"
+  npm --version
+  pip3 --version
+  ! command -v zed
+  test ! -e /home/zed/.zed-pkg
+'
+
+echo "verify: $platform builder and clean Node/Python runtime smoke tests passed"

@@ -46,8 +46,11 @@ def main() -> int:
 
         for match in re.finditer(r"zed\s+install(?P<body>.*?)(?:\n\s*\n|\Z)", text, re.DOTALL):
             command = " ".join(match.group(0).split())
-            if "--frozen" not in command or "--install-mode copy" not in command:
-                fail(errors, path, "every OCI install must be frozen copy mode")
+            if "--cli" in command:
+                if "--cli-install-mode" in command and "--cli-install-mode copy" not in command:
+                    fail(errors, path, "project CLI runtimes must use project-owned copy mode")
+            elif "--frozen" not in command or "--install-mode copy" not in command:
+                fail(errors, path, "every OCI package install must be frozen copy mode")
 
         if re.search(r"COPY\s+--from=.*(?:\.zed-pkg|/root|/home/zed)(?:\s|/)", text):
             fail(errors, path, "stage copy may include Zed home, cache, or store")
