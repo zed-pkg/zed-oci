@@ -1,0 +1,89 @@
+name: publish
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: metadata
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051
+        with:
+          images: ghcr.io/zed-pkg/zed-oci
+          tags: |
+            type=raw,value=edge,enable={{is_default_branch}}
+            type=sha,format=long
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+      - name: Resolve reproducible creation time
+        id: source
+        shell: bash
+        run: echo "created=$(git show -s --format=%cI HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        id: build
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          build-args: |
+            SOURCE_REVISION=${{ github.sha }}
+            CREATED=${{ steps.source.outputs.created }}
+          provenance: mode=max
+          sbom: true
+      - name: Pull back and verify the exact published digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ref="ghcr.io/zed-pkg/zed-oci@${DIGEST}"
+          docker buildx imagetools inspect "$ref"
+          for platform in linux/amd64 linux/arm64; do
+            docker run --rm --platform "$platform" "$ref" sh -euc '
+              test "$(id -u)" = 10001
+              test "$(id -g)" = 10001
+              test "$PWD" = /workspace
+              test "$ZED_PKG_HOME" = /home/zed/.zed-pkg
+              test "$(zed --version)" = "zed-cli 0.1.0"
+            '
+          done
+          docker build \
+            --build-arg "ZED_OCI_IMAGE=$ref" \
+            --file docker/examples/init.Dockerfile \
+            --tag zed-oci-published-runtime:verify \
+            .
+          docker run --rm --read-only zed-oci-published-runtime:verify sh -euc '
+            test "$(id -u)" != 0
+            ! command -v zed
+            test ! -e /home/zed/.zed-pkg
+            test -s /app/.zpkg.toml
+          '
+          printf 'published_digest=%s\n' "$DIGEST" >> "$GITHUB_STEP_SUMMARY"

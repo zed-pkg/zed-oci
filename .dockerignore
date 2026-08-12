@@ -1,0 +1,16 @@
+.git
+.github
+.zed-pkg
+**/.zed-pkg
+.env
+.env.*
+**/.env
+**/.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.tar
+*.tar.gz
+*.zip
+zed-oci.tar
