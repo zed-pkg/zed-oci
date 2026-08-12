@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 
 # Build from a checked-out application that contains .zpkg.toml and .zpkg.lock:
-#   docker build --build-arg ZED_OCI_IMAGE=ghcr.io/zed-pkg/zed-oci:0.1.0@sha256:<digest> \
+#   docker build --build-arg ZED_OCI_IMAGE=ghcr.io/zed-pkg/zed-oci:0.2.0@sha256:<digest> \
 #     -f docker/examples/frozen-install.Dockerfile .
 ARG ZED_OCI_IMAGE=zed-oci:local
 FROM ${ZED_OCI_IMAGE} AS dependencies

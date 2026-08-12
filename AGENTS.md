@@ -12,7 +12,9 @@
 - Keep the repository runtime-neutral. Docker-specific files belong under
   `docker/`, while documentation and policy should apply to any OCI builder.
 - Treat `zed install --frozen --install-mode copy` as the portable image-layer
-  contract. Never rely on store-backed symlinks or hardlinks across stages.
+  package contract. Treat the default copy mode of `zed install --cli` as the
+  project-owned runtime contract. Never rely on store-backed symlinks or
+  hardlinks across stages.
 - Keep the default builder non-root. Root recipes must set `HOME` and
   `ZED_PKG_HOME` explicitly and return to a non-root runtime where practical.
 - Do not copy the Zed store, download/build caches, credentials, or the `zed`

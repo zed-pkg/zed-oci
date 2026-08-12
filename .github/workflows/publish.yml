@@ -84,7 +84,7 @@ jobs:
               test "$(id -g)" = 10001
               test "$PWD" = /workspace
               test "$ZED_PKG_HOME" = /home/zed/.zed-pkg
-              test "$(zed --version)" = "zed 0.1.0"
+              test "$(zed --version)" = "zed 0.2.0"
             '
             labels="$(docker image inspect --format '{{json .Config.Labels}}' "$platform_ref")"
             jq -e \
@@ -106,5 +106,20 @@ jobs:
             ! command -v zed
             test ! -e /home/zed/.zed-pkg
             test -s /app/.zpkg.toml
+          '
+          docker build \
+            --build-arg "ZED_OCI_IMAGE=$ref" \
+            --file docker/examples/cli-tools.Dockerfile \
+            --tag zed-oci-published-cli-runtime:verify \
+            .
+          docker run --rm --read-only zed-oci-published-cli-runtime:verify sh -euc '
+            test "$(node --version)" = "v24.19.0"
+            test "$(nodejs --version)" = "v24.19.0"
+            test "$(python3 --version)" = "Python 3.14.7"
+            test "$(python --version)" = "Python 3.14.7"
+            npm --version
+            pip3 --version
+            ! command -v zed
+            test ! -e /home/zed/.zed-pkg
           '
           printf 'published_digest=%s\n' "$DIGEST" >> "$GITHUB_STEP_SUMMARY"

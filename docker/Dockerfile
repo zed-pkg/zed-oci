@@ -3,9 +3,9 @@
 FROM --platform=$BUILDPLATFORM alpine:3.22.1@sha256:4bcff63911fcb4448bd4fdacec207030997caf25e9bea4045fa6c8c44de311d1 AS zed-release
 
 ARG TARGETARCH
-ARG ZED_VERSION=v0.1.0
-ARG ZED_AMD64_SHA256=08a05f5994068e4c1ccddc9cfc0dac3562473f04ef7fe8bd6dbd7b3f2dbf599a
-ARG ZED_ARM64_SHA256=37d60ac56e46053f7fb6674898607d7e91737b7ca6bf08184906c6240d62210a
+ARG ZED_VERSION=v0.2.0
+ARG ZED_AMD64_SHA256=86ba2b7cb108b7dc1324cce10efa20d552e2bc2c8d6e7d977d4c38474a6bc2c7
+ARG ZED_ARM64_SHA256=4c5d0844c986bda1560b2acd7190cd27e94775ada388389cf997537da28632bc
 
 RUN set -eux; \
     case "${TARGETARCH}" in \
@@ -31,9 +31,9 @@ RUN set -eux; \
     chmod 0755 /out/zed; \
     rm -f "/tmp/${archive}"
 
-FROM alpine:3.22.1@sha256:4bcff63911fcb4448bd4fdacec207030997caf25e9bea4045fa6c8c44de311d1
+FROM debian:bookworm-slim@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
 
-ARG ZED_VERSION=v0.1.0
+ARG ZED_VERSION=v0.2.0
 ARG SOURCE_URL=https://github.com/zed-pkg/zed-oci
 ARG SOURCE_REVISION=local
 ARG CREATED=1970-01-01T00:00:00Z
@@ -46,7 +46,7 @@ LABEL org.opencontainers.image.title="zed-oci" \
       org.opencontainers.image.version="${ZED_VERSION}" \
       org.opencontainers.image.created="${CREATED}" \
       org.opencontainers.image.licenses="MIT" \
-      org.opencontainers.image.base.name="docker.io/library/alpine:3.22.1"
+      org.opencontainers.image.base.name="docker.io/library/debian:bookworm-slim"
 
 USER root
 
@@ -54,8 +54,8 @@ COPY --from=zed-release --chmod=0755 /out/zed /usr/local/bin/zed
 
 RUN set -eux; \
     zed --version; \
-    addgroup -S -g 10001 zed; \
-    adduser -S -D -H -u 10001 -G zed -h /home/zed -s /bin/sh zed; \
+    groupadd --gid 10001 zed; \
+    useradd --uid 10001 --gid 10001 --home-dir /home/zed --create-home --shell /bin/sh zed; \
     mkdir -p /home/zed/.zed-pkg /workspace; \
     chown -R 10001:10001 /home/zed /workspace
 
