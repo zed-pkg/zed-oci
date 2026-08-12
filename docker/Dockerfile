@@ -15,7 +15,16 @@ RUN set -eux; \
     esac; \
     archive="zed-${target}.tar.gz"; \
     url="https://github.com/zed-pkg/zed-cli/releases/download/${ZED_VERSION}/${archive}"; \
-    wget -q -O "/tmp/${archive}" "${url}"; \
+    attempt=1; \
+    while ! wget -q -O "/tmp/${archive}" "${url}"; do \
+      rm -f "/tmp/${archive}"; \
+      if [ "${attempt}" -ge 5 ]; then \
+        echo "failed to download ${archive} after ${attempt} attempts" >&2; \
+        exit 1; \
+      fi; \
+      sleep "$((attempt * 2))"; \
+      attempt="$((attempt + 1))"; \
+    done; \
     printf '%s  %s\n' "${checksum}" "/tmp/${archive}" | sha256sum -c -; \
     mkdir /out; \
     tar -xzf "/tmp/${archive}" -C /out zed; \
