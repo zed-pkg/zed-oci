@@ -50,6 +50,13 @@ def main() -> int:
 
     for path in workflows:
         for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            image_input = re.search(r"^\s+(?:image|driver-opts):\s*([^\s#]+)", raw)
+            if image_input and (
+                "image=" in raw or raw.lstrip().startswith("image:")
+            ):
+                if "${{" not in raw and not SHA256.search(raw):
+                    fail(errors, path, f"line {number}: workflow image is not digest-pinned")
+
             match = re.search(r"\buses:\s*([^\s#]+)", raw)
             if not match:
                 continue
