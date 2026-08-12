@@ -34,7 +34,11 @@ def main() -> int:
         for number, raw in enumerate(text.splitlines(), start=1):
             line = raw.strip()
             if line.startswith("FROM "):
-                image = line.split()[1]
+                parts = line.split()
+                index = 1
+                while index < len(parts) and parts[index].startswith("--"):
+                    index += 1
+                image = parts[index]
                 if image.startswith("${"):
                     continue
                 if not SHA256.search(image):
@@ -50,9 +54,13 @@ def main() -> int:
 
     for path in workflows:
         for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-            image_input = re.search(r"^\s+(?:image|driver-opts):\s*([^\s#]+)", raw)
+            image_input = re.search(
+                r"^\s+(?:image|driver-opts|sbom):\s*([^\s#]+)", raw
+            )
             if image_input and (
-                "image=" in raw or raw.lstrip().startswith("image:")
+                "image=" in raw
+                or "generator=" in raw
+                or raw.lstrip().startswith("image:")
             ):
                 if "${{" not in raw and not SHA256.search(raw):
                     fail(errors, path, f"line {number}: workflow image is not digest-pinned")

@@ -61,7 +61,7 @@ jobs:
             SOURCE_REVISION=${{ github.sha }}
             CREATED=${{ steps.source.outputs.created }}
           provenance: mode=max
-          sbom: true
+          sbom: generator=docker.io/docker/buildkit-syft-scanner@sha256:79e7b013cbec16bbb436f312819a49a4a57752b2270c1a9332ae1a10fcc82a68
       - name: Pull back and verify the exact published digest
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
