@@ -69,15 +69,32 @@ jobs:
         run: |
           set -euo pipefail
           ref="ghcr.io/zed-pkg/zed-oci@${DIGEST}"
+          manifest="$(docker buildx imagetools inspect --raw "$ref")"
           docker buildx imagetools inspect "$ref"
           for platform in linux/amd64 linux/arm64; do
-            docker run --rm --platform "$platform" "$ref" sh -euc '
+            arch="${platform#linux/}"
+            platform_digest="$(jq -er --arg arch "$arch" '
+              .manifests[]
+              | select(.platform.os == "linux" and .platform.architecture == $arch)
+              | .digest
+            ' <<<"$manifest")"
+            platform_ref="ghcr.io/zed-pkg/zed-oci@${platform_digest}"
+            docker run --rm --platform "$platform" "$platform_ref" sh -euc '
               test "$(id -u)" = 10001
               test "$(id -g)" = 10001
               test "$PWD" = /workspace
               test "$ZED_PKG_HOME" = /home/zed/.zed-pkg
               test "$(zed --version)" = "zed 0.1.0"
             '
+            labels="$(docker image inspect --format '{{json .Config.Labels}}' "$platform_ref")"
+            jq -e \
+              --arg revision "$GITHUB_SHA" \
+              --arg source "https://github.com/zed-pkg/zed-oci" \
+              '."org.opencontainers.image.revision" == $revision
+               and ."org.opencontainers.image.source" == $source
+               and ."org.opencontainers.image.licenses" == "MIT"' \
+              <<<"$labels"
+            printf '%s=%s\n' "$platform" "$platform_digest" >> "$GITHUB_STEP_SUMMARY"
           done
           docker build \
             --build-arg "ZED_OCI_IMAGE=$ref" \
