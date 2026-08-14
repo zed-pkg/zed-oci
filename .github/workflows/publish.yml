@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
   packages: write
 
 concurrency:
@@ -21,9 +22,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - name: Verify publication ref and version contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\r\n' < VERSION)"
+          case "$GITHUB_REF" in
+            refs/heads/main|"refs/tags/v${version}") ;;
+            *)
+              echo "ref $GITHUB_REF is not authorized to publish VERSION $version" >&2
+              exit 1
+              ;;
+          esac
+          test "$(grep -Fc "ARG ZED_VERSION=v${version}" docker/Dockerfile)" = 2
       - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8
         with:
           image: docker.io/tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
@@ -35,6 +49,9 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
+        with:
+          cosign-release: v3.1.3
       - id: metadata
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
         with:
@@ -62,6 +79,11 @@ jobs:
             CREATED=${{ steps.source.outputs.created }}
           provenance: mode=max
           sbom: generator=docker.io/docker/buildkit-syft-scanner@sha256:79e7b013cbec16bbb436f312819a49a4a57752b2270c1a9332ae1a10fcc82a68
+      - name: Sign the exact OCI index digest with GitHub OIDC
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        shell: bash
+        run: cosign sign --yes "ghcr.io/zed-pkg/zed-oci@${DIGEST}"
       - name: Pull back and verify the exact published digest
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
@@ -71,6 +93,43 @@ jobs:
           ref="ghcr.io/zed-pkg/zed-oci@${DIGEST}"
           manifest="$(docker buildx imagetools inspect --raw "$ref")"
           docker buildx imagetools inspect "$ref"
+          jq -e '
+            [.manifests[]
+             | select(.platform.os == "linux")
+             | select(.platform.architecture == "amd64" or .platform.architecture == "arm64")
+             | .digest] as $images
+            | [.manifests[]
+               | select(.annotations["vnd.docker.reference.type"] == "attestation-manifest")
+               | .annotations["vnd.docker.reference.digest"]] as $subjects
+            | ($images | length) == 2
+              and ($subjects | length) == 2
+              and (($images | sort) == ($subjects | sort))
+          ' <<<"$manifest"
+          while read -r attestation_digest; do
+            attestation="$(docker buildx imagetools inspect --raw \
+              "ghcr.io/zed-pkg/zed-oci@${attestation_digest}")"
+            jq -e '
+              .config.mediaType == "application/vnd.oci.empty.v1+json"
+              and all(.layers[]; .mediaType == "application/vnd.in-toto+json")
+              and ([.layers[].annotations["in-toto.io/predicate-type"]] | sort)
+                == ["https://slsa.dev/provenance/v1", "https://spdx.dev/Document"]
+            ' <<<"$attestation"
+          done < <(jq -r '
+            .manifests[]
+            | select(.annotations["vnd.docker.reference.type"] == "attestation-manifest")
+            | .digest
+          ' <<<"$manifest")
+          certificate_identity="https://github.com/${GITHUB_WORKFLOW_REF}"
+          cosign verify \
+            --certificate-identity "$certificate_identity" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --output json \
+            "$ref" > cosign-verification.json
+          jq -e --arg digest "$DIGEST" '
+            length >= 1
+            and all(.[]; .critical.image["docker-manifest-digest"] == $digest)
+          ' cosign-verification.json
+          expected_version="zed $(tr -d '\r\n' < VERSION)"
           for platform in linux/amd64 linux/arm64; do
             arch="${platform#linux/}"
             platform_digest="$(jq -er --arg arch "$arch" '
@@ -79,12 +138,19 @@ jobs:
               | .digest
             ' <<<"$manifest")"
             platform_ref="ghcr.io/zed-pkg/zed-oci@${platform_digest}"
-            docker run --rm --platform "$platform" "$platform_ref" sh -euc '
+            docker run --rm --platform "$platform" --network none --read-only \
+              --cap-drop ALL --security-opt no-new-privileges \
+              --tmpfs /tmp:rw,nosuid,nodev,noexec,size=16m \
+              --env "EXPECTED_ZED_VERSION=$expected_version" \
+              "$platform_ref" sh -euc '
               test "$(id -u)" = 10001
               test "$(id -g)" = 10001
               test "$PWD" = /workspace
               test "$ZED_PKG_HOME" = /home/zed/.zed-pkg
-              test "$(zed --version)" = "zed 0.2.1"
+              test -z "$(find "$ZED_PKG_HOME" -mindepth 1 -print -quit)"
+              test -z "$(find "$HOME" -mindepth 1 -maxdepth 1 ! -name .zed-pkg -print -quit)"
+              test ! -e /root/.zed-pkg
+              test "$(zed --version)" = "$EXPECTED_ZED_VERSION"
             '
             labels="$(docker image inspect --format '{{json .Config.Labels}}' "$platform_ref")"
             jq -e \
@@ -101,7 +167,9 @@ jobs:
             --file docker/examples/init.Dockerfile \
             --tag zed-oci-published-runtime:verify \
             .
-          docker run --rm --read-only zed-oci-published-runtime:verify sh -euc '
+          docker run --rm --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges \
+            zed-oci-published-runtime:verify sh -euc '
             test "$(id -u)" != 0
             ! command -v zed
             test ! -e /home/zed/.zed-pkg
@@ -112,7 +180,9 @@ jobs:
             --file docker/examples/cli-tools.Dockerfile \
             --tag zed-oci-published-cli-runtime:verify \
             .
-          docker run --rm --read-only zed-oci-published-cli-runtime:verify sh -euc '
+          docker run --rm --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges \
+            zed-oci-published-cli-runtime:verify sh -euc '
             test "$(node --version)" = "v24.19.0"
             test "$(nodejs --version)" = "v24.19.0"
             test "$(python3 --version)" = "Python 3.14.7"
