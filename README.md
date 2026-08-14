@@ -21,7 +21,7 @@ Docker's syntax is a named builder stage followed by `COPY --from`; there is no
 
 ```dockerfile
 # Replace the version tag with the published digest for production builds.
-FROM ghcr.io/zed-pkg/zed-oci:0.2.1 AS zed-builder
+FROM ghcr.io/zed-pkg/zed-oci:0.2.2 AS zed-builder
 
 WORKDIR /workspace
 RUN zed init project --org example
@@ -48,7 +48,7 @@ uses `/home/zed/.zed-pkg` as `ZED_PKG_HOME`.
 For a root-only build step, make the change explicit and align the cache path:
 
 ```dockerfile
-FROM ghcr.io/zed-pkg/zed-oci:0.2.1 AS dependencies
+FROM ghcr.io/zed-pkg/zed-oci:0.2.2 AS dependencies
 USER root
 ENV HOME=/root ZED_PKG_HOME=/root/.zed-pkg
 WORKDIR /app
@@ -60,7 +60,7 @@ RUN --mount=type=cache,target=/root/.zed-pkg \
 For the preferred non-root form:
 
 ```dockerfile
-FROM ghcr.io/zed-pkg/zed-oci:0.2.1 AS dependencies
+FROM ghcr.io/zed-pkg/zed-oci:0.2.2 AS dependencies
 WORKDIR /workspace
 COPY --chown=10001:10001 .zpkg.toml .zpkg.lock ./
 RUN --mount=type=cache,target=/home/zed/.zed-pkg,uid=10001,gid=10001 \
@@ -135,11 +135,22 @@ It deliberately has no application entrypoint. Its default command is
 `zed --help`, which makes an accidental standalone run useful without changing
 how derived images execute commands.
 
-Release tags mirror this repository's releases. `0.2.1` embeds Zed CLI
-`v0.2.1`, including bounded retries for checksum-locked CLI runtime downloads.
+Release tags mirror this repository's releases. `0.2.2` embeds Zed CLI
+`v0.2.2`, including bounded retries for checksum-locked CLI runtime downloads
+and overlay-safe replacement when separate build layers install Node and Python.
 Production Dockerfiles should pin the published OCI index digest in
 addition to the human-readable tag. Default-branch builds also publish `edge`
 and immutable `sha-<commit>` tags.
+
+When running the builder itself with a read-only root filesystem, provide a
+small ephemeral `/tmp` for Zed's embedded command-contract loader:
+
+```console
+docker run --rm --read-only --network none --cap-drop ALL \
+  --security-opt no-new-privileges \
+  --tmpfs /tmp:rw,nosuid,nodev,noexec,size=16m \
+  ghcr.io/zed-pkg/zed-oci:0.2.2@sha256:<digest> zed --version
+```
 
 ## Build and verify locally
 
@@ -168,9 +179,27 @@ unavailable. That is a partial check, not container acceptance.
 
 Pull requests and pushes run per-platform builder and multi-stage smoke tests.
 Pushes to `main` and `v*` tags publish to
-`ghcr.io/zed-pkg/zed-oci` with BuildKit provenance and an SBOM. The workflow
-then pulls the exact published digest back on both supported platforms and
-reruns the identity and CLI smoke checks.
+`ghcr.io/zed-pkg/zed-oci` with BuildKit provenance and an SPDX SBOM. The
+workflow keylessly signs the exact OCI index with GitHub OIDC, then pulls that
+digest back, verifies its signature and both per-platform attestations, and
+reruns the locked-down identity and CLI smoke checks. CI also rejects fixable
+high or critical package vulnerabilities.
+
+For a release digest, verify the publisher identity independently with:
+
+```console
+cosign verify \
+  --certificate-identity \
+    'https://github.com/zed-pkg/zed-oci/.github/workflows/publish.yml@refs/tags/v0.2.2' \
+  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+  ghcr.io/zed-pkg/zed-oci:0.2.2@sha256:<digest>
+```
+
+The same exact-digest contract is exercised independently from
+[`zed-pkg-test/oci-multiplatform-e2e`](https://github.com/zed-pkg-test/oci-multiplatform-e2e)
+through Docker on amd64/arm64 and rootless Podman on amd64. Audit and release
+evidence is tracked in
+[DEN-3722](https://linear.app/denman/issue/DEN-3722/zed-oci-harden-signed-base-images-and-prove-dockerpodman-acceptance-in).
 
 Implementation and publication evidence is tracked in
 [DEN-3565](https://linear.app/denman/issue/DEN-3565/zed-oci-publish-zpkg-builder-images-for-auditable-multi-stage).
