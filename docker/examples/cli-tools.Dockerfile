@@ -10,7 +10,7 @@ WORKDIR /workspace/project
 RUN zed install --cli nodejs
 RUN zed install --cli python3
 
-FROM debian:bookworm-slim@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
+FROM debian:bookworm-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171
 
 WORKDIR /app
 COPY --from=zed-builder --chown=65532:65532 /workspace/project/ /app/
