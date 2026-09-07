@@ -55,6 +55,7 @@ LABEL org.opencontainers.image.title="zed-oci" \
 USER root
 
 COPY --from=zed-release --chmod=0755 /out/zed /usr/local/bin/zed
+COPY --chmod=0555 docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 
 RUN --network=none set -eux; \
     zed --version; \
@@ -69,4 +70,5 @@ ENV HOME=/home/zed \
 WORKDIR /workspace
 USER 10001:10001
 
-CMD ["zed", "--help"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["/usr/local/bin/zed", "--help"]
