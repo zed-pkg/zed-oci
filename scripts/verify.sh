@@ -5,6 +5,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 python3 scripts/policy.py
+python3 scripts/check-base-metadata.py
 
 if [[ "${NO_DOCKER:-0}" == "1" ]]; then
   echo "verify: static policy passed; Docker checks explicitly skipped" >&2
