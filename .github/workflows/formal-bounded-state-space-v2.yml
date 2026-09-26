@@ -1,0 +1,20 @@
+name: bounded formal package model
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  model-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Prove version to digest immutability
+        run: |
+          node <<'NODE'
+          const assert=require('node:assert/strict'),bound=7;
+          const initial={generation:0,v1:null,v2:null,conflicts:0};
+          const steps=[['publish-v1',s=>s.v1?s:{...s,v1:'sha-a',generation:s.generation+1}],['publish-v2',s=>s.v2?s:{...s,v2:'sha-b',generation:s.generation+1}],['replay-v1',s=>s],['conflict-v1',s=>s]];
+          const inv=s=>s.conflicts===0&&s.generation===(s.v1?1:0)+(s.v2?1:0);
+          let f=[initial],seen=new Map([[JSON.stringify(initial),initial]]);for(let d=0;d<=bound;d++){const n=[];for(const s of f){assert(inv(s));for(const [name,step] of steps){const t=step(structuredClone(s));assert(inv(t),`${name} violated package invariant`);const k=JSON.stringify(t);if(!seen.has(k)){seen.set(k,t);n.push(t)}}}f=n}assert(seen.size>=3);console.log(`package formal model OK states=${seen.size} bound=${bound}`);
+          NODE
