@@ -34,7 +34,7 @@ RUN set -eux; \
     chmod 0755 /out/zed; \
     rm -f "/tmp/${archive}"
 
-FROM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251
+FROM debian:bookworm-slim@sha256:e67eeead736ff7bbe258ef088bff683635c561b1fcfefad0806c1df4ab49ce0e
 
 ARG ZED_VERSION=v0.2.2
 ARG SOURCE_URL=https://github.com/zed-pkg/zed-oci
@@ -50,7 +50,7 @@ LABEL org.opencontainers.image.title="zed-oci" \
       org.opencontainers.image.created="${CREATED}" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.base.name="docker.io/library/debian:bookworm-slim" \
-      org.opencontainers.image.base.digest="sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251"
+      org.opencontainers.image.base.digest="sha256:e67eeead736ff7bbe258ef088bff683635c561b1fcfefad0806c1df4ab49ce0e"
 
 USER root
 
